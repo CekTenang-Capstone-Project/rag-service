@@ -1,4 +1,5 @@
 import os
+import threading
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -26,8 +27,9 @@ if GROQ_API_KEY:
 else:
     print("[Groq] WARNING: GROQ_API_KEY not found.")
 
-# RAG engine (loaded at startup)
+# RAG engine (loaded in background at startup)
 rag_engine = None
+rag_loading = False
 
 # ============================================================
 # FastAPI App
@@ -91,17 +93,25 @@ class WeeklyRAGResponse(BaseModel):
 
 
 # ============================================================
-# Startup
+# Startup (non-blocking — RAG loads in background thread)
 # ============================================================
-@app.on_event("startup")
-def startup_rag():
-    """Load RAG engine at startup. If it fails, /weekly-rag returns error."""
-    global rag_engine
+def _load_rag_background():
+    """Load RAG engine in background so /health responds immediately."""
+    global rag_engine, rag_loading
+    rag_loading = True
     try:
         rag_engine = RAGEngine()
         print("[RAG] Engine initialized successfully!")
     except Exception as e:
         print(f"[RAG] WARNING: RAG disabled - {e}")
+    finally:
+        rag_loading = False
+
+@app.on_event("startup")
+def startup():
+    print("[Startup] App is ready. Loading RAG engine in background...")
+    thread = threading.Thread(target=_load_rag_background, daemon=True)
+    thread.start()
 
 
 # ============================================================
@@ -121,7 +131,8 @@ def health():
         "status": "ok",
         "services": {
             "groq_client": groq_client is not None,
-            "rag_vectorstore": rag_engine is not None
+            "rag_vectorstore": rag_engine is not None,
+            "rag_loading": rag_loading
         }
     }
 
