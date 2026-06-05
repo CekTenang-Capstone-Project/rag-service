@@ -252,7 +252,7 @@ def generate_weekly_rag(req: WeeklyRAGRequest):
     # 5. Call Groq API
     try:
         response = groq_client.chat.completions.create(
-            model="openai/gpt-oss-20b",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": user_prompt}
